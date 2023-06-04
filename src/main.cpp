@@ -53,23 +53,39 @@ private:
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
 
-		uint32_t glfwExtensionCount = 0;
+		uint32_t numGlfwExtensions = 0;
 		const char** glfwExtensions = nullptr;
 
-		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+		glfwExtensions = glfwGetRequiredInstanceExtensions(&numGlfwExtensions);
 
-		createInfo.enabledExtensionCount = glfwExtensionCount;
+		createInfo.enabledExtensionCount = numGlfwExtensions;
 		createInfo.ppEnabledExtensionNames = glfwExtensions;
 		createInfo.enabledLayerCount = 0;
 
-		uint32_t extensionCount = 0;
-		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-		std::vector<VkExtensionProperties> extensions(extensionCount);
-		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+		uint32_t numVulkanExtensions = 0;
+		vkEnumerateInstanceExtensionProperties(nullptr, &numVulkanExtensions, nullptr);
+		std::vector<VkExtensionProperties> vulkanExtensions(numVulkanExtensions);
+		vkEnumerateInstanceExtensionProperties(nullptr, &numVulkanExtensions, vulkanExtensions.data());
 
 		spdlog::debug("Available extensions:");
-		for (const auto& extension : extensions) {
+		for (const auto& extension : vulkanExtensions) {
 			spdlog::debug("\t{}", extension.extensionName);
+		}
+
+		for (uint32_t i = 0; i < numGlfwExtensions; i++) {
+			auto glfwExtension = glfwExtensions[i];
+
+			bool found = false;
+			for (const auto& vulkanExtension : vulkanExtensions) {
+				if (strcmp(glfwExtension, vulkanExtension.extensionName) == 0) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				throw new std::runtime_error(std::format("Extension {} required by GLFW is not supported by Vulkan", glfwExtension));
+			}
 		}
 
 		if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
