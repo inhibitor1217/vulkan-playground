@@ -126,9 +126,16 @@ class HelloTriangleApplication {
   }
 
   void cleanup() {
+    cleanupVulkan();
+    cleanupGlfw();
+  }
+
+  void cleanupGlfw() {
     glfwDestroyWindow(glfwWindow);
     glfwTerminate();
   }
+
+  void cleanupVulkan() { vkDestroyInstance(vkInstance, nullptr); }
 };
 
 int main() {
