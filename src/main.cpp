@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #include <iostream>
+#include <vector>
 #include <stdexcept>
 #include <cstdlib>
 
@@ -58,6 +59,16 @@ private:
 		createInfo.enabledExtensionCount = glfwExtensionCount;
 		createInfo.ppEnabledExtensionNames = glfwExtensions;
 		createInfo.enabledLayerCount = 0;
+
+		uint32_t extensionCount = 0;
+		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+		std::vector<VkExtensionProperties> extensions(extensionCount);
+		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+
+		std::cout << "Available extensions:" << std::endl;
+		for (const auto& extension : extensions) {
+			std::cout << "\t" << extension.extensionName << std::endl;
+		}
 
 		if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
 			throw new std::runtime_error("Failed to create Vulkan instance");
