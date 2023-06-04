@@ -42,36 +42,62 @@ private:
 
 	void createVulkanInstance() {
 		VkApplicationInfo appInfo{};
+		setupVulkanApplicationInfo(appInfo);
+
+		VkInstanceCreateInfo createInfo{};
+		uint32_t numGlfwExtensions = 0;
+		const char** glfwExtensions = nullptr;
+		setupVulkanInstanceCreateInfo(createInfo, appInfo, glfwExtensions, numGlfwExtensions);
+
+		std::vector<VkExtensionProperties> vulkanExtensions;
+		readVulkanSupportedExtensions(vulkanExtensions);
+		logVulkanSupportedExtensions(vulkanExtensions);
+		checkSupportsGlfwRequiredExtensions(numGlfwExtensions, glfwExtensions, vulkanExtensions);
+
+		if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
+			throw new std::runtime_error("Failed to create Vulkan instance");
+		}
+	}
+
+	void setupVulkanApplicationInfo(VkApplicationInfo& appInfo)
+	{
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.pApplicationName = "Hello Triangle";
 		appInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
 		appInfo.pEngineName = "No Engine";
 		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.apiVersion = VK_API_VERSION_1_0;
+	}
 
-		VkInstanceCreateInfo createInfo{};
+	void setupVulkanInstanceCreateInfo(VkInstanceCreateInfo& createInfo, VkApplicationInfo& appInfo, const char**& glfwExtensions, uint32_t& numGlfwExtensions)
+	{
+
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
-
-		uint32_t numGlfwExtensions = 0;
-		const char** glfwExtensions = nullptr;
-
 		glfwExtensions = glfwGetRequiredInstanceExtensions(&numGlfwExtensions);
-
 		createInfo.enabledExtensionCount = numGlfwExtensions;
 		createInfo.ppEnabledExtensionNames = glfwExtensions;
 		createInfo.enabledLayerCount = 0;
+	}
 
+	void readVulkanSupportedExtensions(std::vector<VkExtensionProperties>& vulkanExtensions)
+	{
 		uint32_t numVulkanExtensions = 0;
 		vkEnumerateInstanceExtensionProperties(nullptr, &numVulkanExtensions, nullptr);
-		std::vector<VkExtensionProperties> vulkanExtensions(numVulkanExtensions);
+		vulkanExtensions.resize(numVulkanExtensions);
 		vkEnumerateInstanceExtensionProperties(nullptr, &numVulkanExtensions, vulkanExtensions.data());
+	}
 
+	void logVulkanSupportedExtensions(const std::vector<VkExtensionProperties>& vulkanExtensions)
+	{
 		spdlog::debug("Available extensions:");
 		for (const auto& extension : vulkanExtensions) {
 			spdlog::debug("\t{}", extension.extensionName);
 		}
+	}
 
+	void checkSupportsGlfwRequiredExtensions(const uint32_t& numGlfwExtensions, const char** glfwExtensions, std::vector<VkExtensionProperties>& vulkanExtensions)
+	{
 		for (uint32_t i = 0; i < numGlfwExtensions; i++) {
 			auto glfwExtension = glfwExtensions[i];
 
@@ -86,10 +112,6 @@ private:
 			if (!found) {
 				throw new std::runtime_error(std::format("Extension {} required by GLFW is not supported by Vulkan", glfwExtension));
 			}
-		}
-
-		if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
-			throw new std::runtime_error("Failed to create Vulkan instance");
 		}
 	}
 
