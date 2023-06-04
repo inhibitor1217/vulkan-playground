@@ -1,6 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <spdlog/spdlog.h>
+
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -65,9 +67,9 @@ private:
 		std::vector<VkExtensionProperties> extensions(extensionCount);
 		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
 
-		std::cout << "Available extensions:" << std::endl;
+		spdlog::debug("Available extensions:");
 		for (const auto& extension : extensions) {
-			std::cout << "\t" << extension.extensionName << std::endl;
+			spdlog::debug("\t{}", extension.extensionName);
 		}
 
 		if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
@@ -90,6 +92,8 @@ private:
 
 int main() {
 	HelloTriangleApplication app;
+
+	spdlog::set_level(spdlog::level::debug);
 
 	try {
 		app.run();
