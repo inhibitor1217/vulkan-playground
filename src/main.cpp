@@ -10,6 +10,16 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
+const std::vector<const char*> validationLayers = {
+    "VK_LAYER_KHRONOS_validation",
+};
+
+#ifdef NDEBUG
+const bool enableValidationLayers = false;
+#else
+const bool enableValidationLayers = true;
+#endif
+
 class HelloTriangleApplication {
  public:
   void run() {
@@ -115,6 +125,34 @@ class HelloTriangleApplication {
         throw new std::runtime_error(std::format(
             "Extension {} required by GLFW is not supported by Vulkan",
             glfwExtension));
+      }
+    }
+  }
+
+  void checkSupportsVulkanValidationLayer() {
+    if (!enableValidationLayers) {
+      return;
+    }
+
+    uint32_t numVulkanLayers;
+    vkEnumerateInstanceLayerProperties(&numVulkanLayers, nullptr);
+
+    std::vector<VkLayerProperties> vulkanLayers(numVulkanLayers);
+    vkEnumerateInstanceLayerProperties(&numVulkanLayers, vulkanLayers.data());
+
+    for (const char* layer : validationLayers) {
+      bool found = false;
+      for (const auto& vulkanLayer : vulkanLayers) {
+        if (strcmp(layer, vulkanLayer.layerName) == 0) {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        throw new std::runtime_error(
+						std::format("Validation layer {} requested, but not available",
+              												layer));
       }
     }
   }
