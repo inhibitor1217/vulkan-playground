@@ -10,15 +10,15 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const std::vector<const char*> validationLayers = {
+#ifdef NDEBUG
+const bool VK_ENABLE_VALIDATION_LAYERS = false;
+#else
+const bool VK_ENABLE_VALIDATION_LAYERS = true;
+#endif
+
+const std::vector<const char*> VK_VALIDATION_LAYERS = {
     "VK_LAYER_KHRONOS_validation",
 };
-
-#ifdef NDEBUG
-const bool enableValidationLayers = false;
-#else
-const bool enableValidationLayers = true;
-#endif
 
 class HelloTriangleApplication {
  public:
@@ -51,11 +51,20 @@ class HelloTriangleApplication {
     VkApplicationInfo appInfo{};
     setupVulkanApplicationInfo(appInfo);
 
-    VkInstanceCreateInfo createInfo{};
+    if (VK_ENABLE_VALIDATION_LAYERS) {
+      std::vector<VkLayerProperties> vulkanLayers;
+      readVulkanSupportedLayers(vulkanLayers);
+      logVulkanSupportedLayers(vulkanLayers);
+      checkSupportsVulkanValidationLayer(VK_VALIDATION_LAYERS, vulkanLayers);
+    }
+
     uint32_t numGlfwExtensions = 0;
-    const char** glfwExtensions = nullptr;
+    const char** glfwExtensions =
+        glfwGetRequiredInstanceExtensions(&numGlfwExtensions);
+
+    VkInstanceCreateInfo createInfo{};
     setupVulkanInstanceCreateInfo(createInfo, appInfo, glfwExtensions,
-                                  numGlfwExtensions);
+                                  numGlfwExtensions, VK_ENABLE_VALIDATION_LAYERS, VK_VALIDATION_LAYERS);
 
     std::vector<VkExtensionProperties> vulkanExtensions;
     readVulkanSupportedExtensions(vulkanExtensions);
@@ -64,7 +73,7 @@ class HelloTriangleApplication {
                                         vulkanExtensions);
 
     if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
-      throw new std::runtime_error("Failed to create Vulkan instance");
+      throw std::runtime_error("Failed to create Vulkan instance");
     }
   }
 
@@ -77,16 +86,21 @@ class HelloTriangleApplication {
     appInfo.apiVersion = VK_API_VERSION_1_0;
   }
 
-  void setupVulkanInstanceCreateInfo(VkInstanceCreateInfo& createInfo,
-                                     VkApplicationInfo& appInfo,
-                                     const char**& glfwExtensions,
-                                     uint32_t& numGlfwExtensions) {
+  void setupVulkanInstanceCreateInfo(
+      VkInstanceCreateInfo& createInfo, VkApplicationInfo& appInfo,
+      const char**& glfwExtensions, uint32_t& numGlfwExtensions,
+      bool enableValidationLayers, const std::vector<const char*>& validationLayers) {
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&numGlfwExtensions);
     createInfo.enabledExtensionCount = numGlfwExtensions;
     createInfo.ppEnabledExtensionNames = glfwExtensions;
-    createInfo.enabledLayerCount = 0;
+
+    if (enableValidationLayers) {
+      createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+      createInfo.ppEnabledLayerNames = validationLayers.data();
+    } else {
+      createInfo.enabledLayerCount = 0;
+    }
   }
 
   void readVulkanSupportedExtensions(
@@ -101,7 +115,7 @@ class HelloTriangleApplication {
 
   void logVulkanSupportedExtensions(
       const std::vector<VkExtensionProperties>& vulkanExtensions) {
-    spdlog::debug("Available extensions:");
+    spdlog::debug("Available VK extensions ({} total):", vulkanExtensions.size());
     for (const auto& extension : vulkanExtensions) {
       spdlog::debug("\t{}", extension.extensionName);
     }
@@ -109,7 +123,7 @@ class HelloTriangleApplication {
 
   void checkSupportsGlfwRequiredExtensions(
       const uint32_t& numGlfwExtensions, const char** glfwExtensions,
-      std::vector<VkExtensionProperties>& vulkanExtensions) {
+      const std::vector<VkExtensionProperties>& vulkanExtensions) {
     for (uint32_t i = 0; i < numGlfwExtensions; i++) {
       auto glfwExtension = glfwExtensions[i];
 
@@ -122,25 +136,33 @@ class HelloTriangleApplication {
       }
 
       if (!found) {
-        throw new std::runtime_error(std::format(
+        throw std::runtime_error(std::format(
             "Extension {} required by GLFW is not supported by Vulkan",
             glfwExtension));
       }
     }
   }
 
-  void checkSupportsVulkanValidationLayer() {
-    if (!enableValidationLayers) {
-      return;
-    }
-
+  void readVulkanSupportedLayers(std::vector<VkLayerProperties>& vulkanLayers) {
     uint32_t numVulkanLayers;
     vkEnumerateInstanceLayerProperties(&numVulkanLayers, nullptr);
 
-    std::vector<VkLayerProperties> vulkanLayers(numVulkanLayers);
+    vulkanLayers.resize(numVulkanLayers);
     vkEnumerateInstanceLayerProperties(&numVulkanLayers, vulkanLayers.data());
+  }
 
-    for (const char* layer : validationLayers) {
+  void logVulkanSupportedLayers(
+      const std::vector<VkLayerProperties>& vulkanLayers) {
+    spdlog::debug("Available VK layers ({} total):", vulkanLayers.size());
+    for (const auto& layer : vulkanLayers) {
+      spdlog::debug("\t{}", layer.layerName);
+    }
+  }
+
+  void checkSupportsVulkanValidationLayer(
+      const std::vector<const char*>& requiredLayers,
+      const std::vector<VkLayerProperties>& vulkanLayers) {
+    for (const char* layer : requiredLayers) {
       bool found = false;
       for (const auto& vulkanLayer : vulkanLayers) {
         if (strcmp(layer, vulkanLayer.layerName) == 0) {
@@ -150,9 +172,8 @@ class HelloTriangleApplication {
       }
 
       if (!found) {
-        throw new std::runtime_error(
-						std::format("Validation layer {} requested, but not available",
-              												layer));
+        throw std::runtime_error(std::format(
+            "Validation layer {} requested, but not available", layer));
       }
     }
   }
