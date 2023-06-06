@@ -36,6 +36,7 @@ class HelloTriangleApplication {
   VkInstance vkInstance = VK_NULL_HANDLE;
   VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
   VkDevice vkDevice = VK_NULL_HANDLE;
+  VkQueue vkGraphicsQueue = VK_NULL_HANDLE;
   VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
 
   struct VkPhysicalDeviceQueueFamilies {
@@ -350,6 +351,9 @@ class HelloTriangleApplication {
         VK_SUCCESS) {
       throw std::runtime_error("Failed to create logical device");
     }
+
+    vkGetDeviceQueue(vkDevice, queueCreateInfo.queueFamilyIndex, 0,
+                     &vkGraphicsQueue);
   }
 
   void setupVulkanDeviceQueueCreateInfo(
