@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -30,11 +31,17 @@ class HelloTriangleApplication {
   }
 
  private:
-  GLFWwindow* glfwWindow;
+  GLFWwindow* glfwWindow = nullptr;
 
-  VkInstance vkInstance;
+  VkInstance vkInstance = VK_NULL_HANDLE;
   VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerEXT vkDebugMessenger;
+  VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
+
+  struct VkPhysicalDeviceQueueFamilies {
+    std::optional<uint32_t> graphicsFamily;
+
+    bool isOk() { return graphicsFamily.has_value(); }
+  };
 
   void initWindow() {
     auto result = glfwInit();
@@ -296,9 +303,33 @@ class HelloTriangleApplication {
     }
   }
 
-  bool isVulkanPhysicalDeviceSuitable(VkPhysicalDevice device) const {
-    // Any GPU will do for now.
-    return true;
+  bool isVulkanPhysicalDeviceSuitable(VkPhysicalDevice device) {
+    VkPhysicalDeviceQueueFamilies queueFamilies;
+    readVulkanPhysicalDeviceQueueFamilyProperties(device, queueFamilies);
+
+    return queueFamilies.isOk();
+  }
+
+  void readVulkanPhysicalDeviceQueueFamilyProperties(
+      VkPhysicalDevice device, VkPhysicalDeviceQueueFamilies& queueFamilies) {
+    uint32_t numQueueFamilies = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &numQueueFamilies,
+                                             nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilyProperties(
+        numQueueFamilies);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &numQueueFamilies,
+                                             queueFamilyProperties.data());
+
+    auto it =
+        std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),
+                     [](const VkQueueFamilyProperties& queueFamily) {
+                       return queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT;
+                     });
+    if (it != queueFamilyProperties.end()) {
+      queueFamilies.graphicsFamily = static_cast<uint32_t>(
+          std::distance(queueFamilyProperties.begin(), it));
+    }
   }
 
   void mainLoop() {
