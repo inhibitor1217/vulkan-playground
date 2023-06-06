@@ -42,16 +42,19 @@ class HelloTriangleApplication {
   GLFWwindow* glfwWindow = nullptr;
 
   VkInstance vkInstance = VK_NULL_HANDLE;
+  VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
+
   VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
   VkDevice vkDevice = VK_NULL_HANDLE;
   VkQueue vkGraphicsQueue = VK_NULL_HANDLE;
   VkQueue vkPresentQueue = VK_NULL_HANDLE;
   VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
+
   VkSwapchainKHR vkSwapchain = VK_NULL_HANDLE;
   std::vector<VkImage> vkSwapchainImages;
-  VkFormat vkSwapchainFormat;
-  VkExtent2D vkSwapchainExtent;
-  VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
+  VkFormat vkSwapchainFormat = VK_FORMAT_UNDEFINED;
+  VkExtent2D vkSwapchainExtent = {0, 0};
+  std::vector<VkImageView> vkSwapchainImageViews;
 
   struct VkPhysicalDeviceQueueFamilies {
     std::optional<uint32_t> graphicsFamily;
@@ -129,6 +132,7 @@ class HelloTriangleApplication {
     createVulkanPhysicalDevice();
     createVulkanLogicalDevice();
     createVulkanSwapchain();
+    createVulkanImageViews();
   }
 
   void createVulkanInstance() {
@@ -611,6 +615,34 @@ class HelloTriangleApplication {
     vkSwapchainExtent = extent;
   }
 
+  void createVulkanImageViews() {
+    vkSwapchainImageViews.resize(vkSwapchainImages.size());
+
+    for (int i = 0; i < vkSwapchainImageViews.size(); i++) {
+      auto image = vkSwapchainImages[i];
+      VkImageViewCreateInfo createInfo{};
+
+      createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+      createInfo.image = image;
+      createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+      createInfo.format = vkSwapchainFormat;
+      createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+      createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+      createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+      createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+      createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      createInfo.subresourceRange.baseMipLevel = 0;
+      createInfo.subresourceRange.levelCount = 1;
+      createInfo.subresourceRange.baseArrayLayer = 0;
+      createInfo.subresourceRange.layerCount = 1;
+
+      if (vkCreateImageView(vkDevice, &createInfo, nullptr,
+                            &vkSwapchainImageViews[i]) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create image views");
+      }
+    }
+  }
+
   void mainLoop() {
     while (!glfwWindowShouldClose(glfwWindow)) {
       glfwPollEvents();
@@ -628,6 +660,9 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    for (auto imageView : vkSwapchainImageViews) {
+      vkDestroyImageView(vkDevice, imageView, nullptr);
+    }
     vkDestroySwapchainKHR(vkDevice, vkSwapchain, nullptr);
     vkDestroyDevice(vkDevice, nullptr);
     vkDestroySurfaceKHR(vkInstance, vkSurface, nullptr);
