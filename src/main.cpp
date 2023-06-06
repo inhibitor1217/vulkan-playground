@@ -399,9 +399,9 @@ class HelloTriangleApplication {
     setupVulkanPhysicalDeviceFeatures(deviceFeatures);
 
     VkDeviceCreateInfo createInfo{};
-    setupVulkanDeviceCreateInfo(createInfo, queueCreateInfos, deviceFeatures,
-                                VK_ENABLE_VALIDATION_LAYERS,
-                                VK_VALIDATION_LAYERS);
+    setupVulkanDeviceCreateInfo(
+        createInfo, queueCreateInfos, VK_DEVICE_EXTENSIONS, deviceFeatures,
+        VK_ENABLE_VALIDATION_LAYERS, VK_VALIDATION_LAYERS);
 
     if (vkCreateDevice(vkPhysicalDevice, &createInfo, nullptr, &vkDevice) !=
         VK_SUCCESS) {
@@ -444,6 +444,7 @@ class HelloTriangleApplication {
   void setupVulkanDeviceCreateInfo(
       VkDeviceCreateInfo& createInfo,
       const std::vector<VkDeviceQueueCreateInfo>& queueCreateInfos,
+      const std::vector<const char*>& deviceExtensions,
       const VkPhysicalDeviceFeatures& deviceFeatures,
       bool enableValidationLayers,
       const std::vector<const char*>& validationLayers) {
@@ -452,6 +453,9 @@ class HelloTriangleApplication {
     createInfo.queueCreateInfoCount =
         static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.enabledExtensionCount =
+        static_cast<uint32_t>(deviceExtensions.size());
+    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
     if (enableValidationLayers) {
       createInfo.enabledLayerCount =
