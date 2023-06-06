@@ -59,6 +59,7 @@ class HelloTriangleApplication {
 
   VkRenderPass vkRenderPass = VK_NULL_HANDLE;
   VkPipelineLayout vkPipelineLayout = VK_NULL_HANDLE;
+  VkPipeline vkGraphicsPipeline = VK_NULL_HANDLE;
 
   struct VkPhysicalDeviceQueueFamilies {
     std::optional<uint32_t> graphicsFamily;
@@ -829,6 +830,30 @@ class HelloTriangleApplication {
       throw std::runtime_error("Failed to create pipeline layout");
     }
 
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+    pipelineInfo.pViewportState = &viewportStateInfo;
+    pipelineInfo.pRasterizationState = &rasterizerInfo;
+    pipelineInfo.pMultisampleState = &multisamplingInfo;
+    pipelineInfo.pDepthStencilState = nullptr;
+    pipelineInfo.pColorBlendState = &colorBlendingInfo;
+    pipelineInfo.pDynamicState = &dynamicStateInfo;
+    pipelineInfo.layout = vkPipelineLayout;
+    pipelineInfo.renderPass = vkRenderPass;
+    pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineInfo.basePipelineIndex = -1;
+
+    if (vkCreateGraphicsPipelines(vkDevice, VK_NULL_HANDLE, 1, &pipelineInfo,
+                                  nullptr, &vkGraphicsPipeline) != VK_SUCCESS) {
+      throw std::runtime_error("Failed to create graphics pipeline");
+    }
+
     vkDestroyShaderModule(vkDevice, vertexShaderModule, nullptr);
     vkDestroyShaderModule(vkDevice, fragmentShaderModule, nullptr);
   }
@@ -866,6 +891,7 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    vkDestroyPipeline(vkDevice, vkGraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkDevice, vkPipelineLayout, nullptr);
     vkDestroyRenderPass(vkDevice, vkRenderPass, nullptr);
     for (auto imageView : vkSwapchainImageViews) {
