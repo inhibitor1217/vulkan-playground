@@ -35,6 +35,7 @@ class HelloTriangleApplication {
 
   VkInstance vkInstance = VK_NULL_HANDLE;
   VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
+  VkDevice vkDevice = VK_NULL_HANDLE;
   VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
 
   struct VkPhysicalDeviceQueueFamilies {
@@ -61,6 +62,7 @@ class HelloTriangleApplication {
       createVulkanDebugMessenger();
     }
     createVulkanPhysicalDevice();
+    createVulkanLogicalDevice();
   }
 
   void createVulkanInstance() {
@@ -332,6 +334,62 @@ class HelloTriangleApplication {
     }
   }
 
+  void createVulkanLogicalDevice() {
+    VkDeviceQueueCreateInfo queueCreateInfo{};
+    setupVulkanDeviceQueueCreateInfo(queueCreateInfo);
+
+    VkPhysicalDeviceFeatures deviceFeatures{};
+    setupVulkanPhysicalDeviceFeatures(deviceFeatures);
+
+    VkDeviceCreateInfo createInfo{};
+    setupVulkanDeviceCreateInfo(createInfo, queueCreateInfo, deviceFeatures,
+                                VK_ENABLE_VALIDATION_LAYERS,
+                                VK_VALIDATION_LAYERS);
+
+    if (vkCreateDevice(vkPhysicalDevice, &createInfo, nullptr, &vkDevice) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Failed to create logical device");
+    }
+  }
+
+  void setupVulkanDeviceQueueCreateInfo(
+      VkDeviceQueueCreateInfo& queueCreateInfo) {
+    VkPhysicalDeviceQueueFamilies queueFamilies;
+    readVulkanPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice,
+                                                  queueFamilies);
+    float queuePriority = 1.0f;
+
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = queueFamilies.graphicsFamily.value();
+    queueCreateInfo.queueCount = 1;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
+  }
+
+  void setupVulkanPhysicalDeviceFeatures(
+      VkPhysicalDeviceFeatures& deviceFeatures) {
+    // No features required for now.
+  }
+
+  void setupVulkanDeviceCreateInfo(
+      VkDeviceCreateInfo& createInfo,
+      const VkDeviceQueueCreateInfo& queueCreateInfo,
+      const VkPhysicalDeviceFeatures& deviceFeatures,
+      bool enableValidationLayers,
+      const std::vector<const char*>& validationLayers) {
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+    createInfo.pEnabledFeatures = &deviceFeatures;
+
+    if (enableValidationLayers) {
+      createInfo.enabledLayerCount =
+          static_cast<uint32_t>(validationLayers.size());
+      createInfo.ppEnabledLayerNames = validationLayers.data();
+    } else {
+      createInfo.enabledLayerCount = 0;
+    }
+  }
+
   void mainLoop() {
     while (!glfwWindowShouldClose(glfwWindow)) {
       glfwPollEvents();
@@ -349,6 +407,8 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    vkDestroyDevice(vkDevice, nullptr);
+
     if (VK_ENABLE_VALIDATION_LAYERS) {
       auto destroyDebugUtilsMessengerEXT =
           (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
