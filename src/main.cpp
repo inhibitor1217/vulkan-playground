@@ -77,9 +77,10 @@ class HelloTriangleApplication {
     checkSupportsRequiredExtensions(requiredExtensions, vulkanExtensions);
 
     VkInstanceCreateInfo createInfo{};
-    setupVulkanInstanceCreateInfo(createInfo, appInfo, requiredExtensions,
-                                  VK_ENABLE_VALIDATION_LAYERS,
-                                  VK_VALIDATION_LAYERS);
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    setupVulkanInstanceCreateInfo(
+        createInfo, debugCreateInfo, appInfo, requiredExtensions,
+        VK_ENABLE_VALIDATION_LAYERS, VK_VALIDATION_LAYERS);
 
     if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
       throw std::runtime_error("Failed to create Vulkan instance");
@@ -96,8 +97,10 @@ class HelloTriangleApplication {
   }
 
   void setupVulkanInstanceCreateInfo(
-      VkInstanceCreateInfo& createInfo, VkApplicationInfo& appInfo,
-      std::vector<const char*>& requiredExtensions, bool enableValidationLayers,
+      VkInstanceCreateInfo& createInfo,
+      VkDebugUtilsMessengerCreateInfoEXT& debugCreateInfo,
+      VkApplicationInfo& appInfo, std::vector<const char*>& requiredExtensions,
+      bool enableValidationLayers,
       const std::vector<const char*>& validationLayers) {
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
@@ -111,6 +114,13 @@ class HelloTriangleApplication {
       createInfo.ppEnabledLayerNames = validationLayers.data();
     } else {
       createInfo.enabledLayerCount = 0;
+    }
+
+    if (enableValidationLayers) {
+      setupVulkanDebugMessengerCreateInfo(debugCreateInfo);
+      createInfo.pNext = &debugCreateInfo;
+    } else {
+      createInfo.pNext = nullptr;
     }
   }
 
@@ -206,17 +216,7 @@ class HelloTriangleApplication {
 
   void createVulkanDebugMessenger() {
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity =
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = vkDebugMessengerCallback;
-    createInfo.pUserData = nullptr;
+    setupVulkanDebugMessengerCreateInfo(createInfo);
 
     auto createDebugUtilsMessengerEXT =
         (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
@@ -231,6 +231,21 @@ class HelloTriangleApplication {
                                      &vkDebugMessenger) != VK_SUCCESS) {
       throw std::runtime_error("Failed to setup debug messenger");
     }
+  }
+
+  void setupVulkanDebugMessengerCreateInfo(
+      VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = vkDebugMessengerCallback;
+    createInfo.pUserData = nullptr;
   }
 
   void mainLoop() {
