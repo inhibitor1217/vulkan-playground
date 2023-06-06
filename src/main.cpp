@@ -55,6 +55,14 @@ class HelloTriangleApplication {
     }
   };
 
+  struct VkSwapChainSupportDetails {
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+
+    bool isOk() { return !formats.empty() && !presentModes.empty(); }
+  };
+
   void initWindow() {
     auto result = glfwInit();
     if (result != GLFW_TRUE) {
@@ -331,8 +339,10 @@ class HelloTriangleApplication {
     VkPhysicalDeviceQueueFamilies queueFamilies;
     readVulkanPhysicalDeviceQueueFamilyProperties(device, queueFamilies);
 
-    return queueFamilies.isOk() && checkSupportsRequiredDeviceExtension(
-                                       device, requiredDeviceExtensions);
+    return queueFamilies.isOk() &&
+           checkSupportsRequiredDeviceExtension(device,
+                                                requiredDeviceExtensions) &&
+           checkSupportsSwapChain(device);
   }
 
   void readVulkanPhysicalDeviceQueueFamilyProperties(
@@ -385,6 +395,36 @@ class HelloTriangleApplication {
                                      requiredDeviceExtension) == 0;
                      }) != deviceExtensions.end();
         });
+  }
+
+  bool checkSupportsSwapChain(VkPhysicalDevice device) {
+    VkSwapChainSupportDetails swapChainSupport =
+        readVulkanSwapChainSupport(device);
+    return swapChainSupport.isOk();
+  }
+
+  VkSwapChainSupportDetails readVulkanSwapChainSupport(
+      VkPhysicalDevice device) {
+    VkSwapChainSupportDetails details;
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, vkSurface,
+                                              &details.capabilities);
+
+    uint32_t numFormats;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, vkSurface, &numFormats,
+                                         nullptr);
+    details.formats.resize(numFormats);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, vkSurface, &numFormats,
+                                         details.formats.data());
+
+    uint32_t numPresentModes;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, vkSurface,
+                                              &numPresentModes, nullptr);
+    details.presentModes.resize(numPresentModes);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        device, vkSurface, &numPresentModes, details.presentModes.data());
+
+    return details;
   }
 
   void createVulkanLogicalDevice() {
