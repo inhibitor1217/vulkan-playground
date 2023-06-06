@@ -2,8 +2,11 @@
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -44,6 +47,10 @@ class HelloTriangleApplication {
   VkQueue vkGraphicsQueue = VK_NULL_HANDLE;
   VkQueue vkPresentQueue = VK_NULL_HANDLE;
   VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
+  VkSwapchainKHR vkSwapchain = VK_NULL_HANDLE;
+  std::vector<VkImage> vkSwapchainImages;
+  VkFormat vkSwapchainFormat;
+  VkExtent2D vkSwapchainExtent;
   VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
 
   struct VkPhysicalDeviceQueueFamilies {
@@ -61,6 +68,44 @@ class HelloTriangleApplication {
     std::vector<VkPresentModeKHR> presentModes;
 
     bool isOk() { return !formats.empty() && !presentModes.empty(); }
+
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat() {
+      for (const auto& surfaceFormat : formats) {
+        if (surfaceFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
+            surfaceFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+          return surfaceFormat;
+        }
+      }
+
+      return formats[0];
+    }
+
+    VkPresentModeKHR chooseSwapPresentMode() {
+      return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkExtent2D chooseSwapExtent(GLFWwindow* glfwWindow) {
+      // Just use the window's current extent
+      if (capabilities.currentExtent.width !=
+          std::numeric_limits<uint32_t>::max()) {
+        return capabilities.currentExtent;
+      } else {
+        // In this case, we need to pick the extent that best matches the window
+        int width, height;
+        glfwGetFramebufferSize(glfwWindow, &width, &height);
+
+        VkExtent2D actualExtent = {
+            std::clamp(static_cast<uint32_t>(width),
+                       capabilities.minImageExtent.width,
+                       capabilities.maxImageExtent.width),
+            std::clamp(static_cast<uint32_t>(height),
+                       capabilities.minImageExtent.height,
+                       capabilities.maxImageExtent.height),
+        };
+
+        return actualExtent;
+      }
+    }
   };
 
   void initWindow() {
@@ -83,6 +128,7 @@ class HelloTriangleApplication {
     createVulkanSurface();
     createVulkanPhysicalDevice();
     createVulkanLogicalDevice();
+    createVulkanSwapchain();
   }
 
   void createVulkanInstance() {
@@ -506,6 +552,65 @@ class HelloTriangleApplication {
     }
   }
 
+  void createVulkanSwapchain() {
+    auto details = readVulkanSwapChainSupport(vkPhysicalDevice);
+
+    auto surfaceFormat = details.chooseSwapSurfaceFormat();
+    auto presentMode = details.chooseSwapPresentMode();
+    auto extent = details.chooseSwapExtent(glfwWindow);
+    auto imageCount = details.capabilities.minImageCount + 1;
+    if (details.capabilities.maxImageCount > 0) {
+      imageCount = std::min(imageCount, details.capabilities.maxImageCount);
+    }
+
+    VkSwapchainCreateInfoKHR createInfo{};
+
+    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    createInfo.surface = vkSurface;
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    VkPhysicalDeviceQueueFamilies queueFamilies;
+    readVulkanPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice,
+                                                  queueFamilies);
+    if (queueFamilies.graphicsFamily != queueFamilies.presentFamily) {
+      createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+      createInfo.queueFamilyIndexCount = 2;
+      uint32_t queueFamilyIndices[] = {queueFamilies.graphicsFamily.value(),
+                                       queueFamilies.presentFamily.value()};
+      createInfo.pQueueFamilyIndices = queueFamilyIndices;
+    } else {
+      createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      createInfo.queueFamilyIndexCount = 0;
+      createInfo.pQueueFamilyIndices = nullptr;
+    }
+
+    createInfo.preTransform = details.capabilities.currentTransform;
+    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE;
+    createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    if (vkCreateSwapchainKHR(vkDevice, &createInfo, nullptr, &vkSwapchain) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Failed to create swap chain");
+    }
+
+    uint32_t numSwapchainImages = 0;
+    vkGetSwapchainImagesKHR(vkDevice, vkSwapchain, &numSwapchainImages,
+                            nullptr);
+    vkSwapchainImages.resize(numSwapchainImages);
+    vkGetSwapchainImagesKHR(vkDevice, vkSwapchain, &numSwapchainImages,
+                            vkSwapchainImages.data());
+
+    vkSwapchainFormat = surfaceFormat.format;
+    vkSwapchainExtent = extent;
+  }
+
   void mainLoop() {
     while (!glfwWindowShouldClose(glfwWindow)) {
       glfwPollEvents();
@@ -523,6 +628,7 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    vkDestroySwapchainKHR(vkDevice, vkSwapchain, nullptr);
     vkDestroyDevice(vkDevice, nullptr);
     vkDestroySurfaceKHR(vkInstance, vkSurface, nullptr);
 
