@@ -12,16 +12,6 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-#ifdef NDEBUG
-const bool VK_ENABLE_VALIDATION_LAYERS = false;
-#else
-const bool VK_ENABLE_VALIDATION_LAYERS = true;
-#endif
-
-const std::vector<const char*> VK_VALIDATION_LAYERS = {
-    "VK_LAYER_KHRONOS_validation",
-};
-
 class HelloTriangleApplication {
  public:
   void run() {
@@ -32,6 +22,20 @@ class HelloTriangleApplication {
   }
 
  private:
+#ifdef NDEBUG
+  const bool VK_ENABLE_VALIDATION_LAYERS = false;
+#else
+  const bool VK_ENABLE_VALIDATION_LAYERS = true;
+#endif
+
+  const std::vector<const char*> VK_VALIDATION_LAYERS = {
+      "VK_LAYER_KHRONOS_validation",
+  };
+
+  const std::vector<const char*> VK_DEVICE_EXTENSIONS = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
+
   GLFWwindow* glfwWindow = nullptr;
 
   VkInstance vkInstance = VK_NULL_HANDLE;
@@ -280,10 +284,11 @@ class HelloTriangleApplication {
     readAvailableVulkanPhysicalDevices(devices);
     logAvailableVulkanPhysicalDevices(devices);
 
-    auto it = std::find_if(
-        devices.begin(), devices.end(), [this](const VkPhysicalDevice& device) {
-          return this->isVulkanPhysicalDeviceSuitable(device);
-        });
+    auto it = std::find_if(devices.begin(), devices.end(),
+                           [this](const VkPhysicalDevice& device) {
+                             return this->isVulkanPhysicalDeviceSuitable(
+                                 device, VK_DEVICE_EXTENSIONS);
+                           });
 
     if (it == devices.end()) {
       vkPhysicalDevice = VK_NULL_HANDLE;
@@ -320,11 +325,14 @@ class HelloTriangleApplication {
     }
   }
 
-  bool isVulkanPhysicalDeviceSuitable(VkPhysicalDevice device) {
+  bool isVulkanPhysicalDeviceSuitable(
+      VkPhysicalDevice device,
+      const std::vector<const char*>& requiredDeviceExtensions) {
     VkPhysicalDeviceQueueFamilies queueFamilies;
     readVulkanPhysicalDeviceQueueFamilyProperties(device, queueFamilies);
 
-    return queueFamilies.isOk();
+    return queueFamilies.isOk() && checkSupportsRequiredDeviceExtension(
+                                       device, requiredDeviceExtensions);
   }
 
   void readVulkanPhysicalDeviceQueueFamilyProperties(
@@ -353,6 +361,30 @@ class HelloTriangleApplication {
         queueFamilies.presentFamily = i;
       }
     }
+  }
+
+  bool checkSupportsRequiredDeviceExtension(
+      VkPhysicalDevice device,
+      const std::vector<const char*>& requiredDeviceExtensions) {
+    uint32_t numDeviceExtensions = 0;
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &numDeviceExtensions,
+                                         nullptr);
+
+    std::vector<VkExtensionProperties> deviceExtensions(numDeviceExtensions);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &numDeviceExtensions,
+                                         deviceExtensions.data());
+
+    return std::all_of(
+        requiredDeviceExtensions.begin(), requiredDeviceExtensions.end(),
+        [&deviceExtensions](const char* requiredDeviceExtension) {
+          return std::find_if(
+                     deviceExtensions.begin(), deviceExtensions.end(),
+                     [&requiredDeviceExtension](
+                         const VkExtensionProperties& deviceExtension) {
+                       return strcmp(deviceExtension.extensionName,
+                                     requiredDeviceExtension) == 0;
+                     }) != deviceExtensions.end();
+        });
   }
 
   void createVulkanLogicalDevice() {
