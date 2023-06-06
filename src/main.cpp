@@ -31,7 +31,9 @@ class HelloTriangleApplication {
 
  private:
   GLFWwindow* glfwWindow;
+
   VkInstance vkInstance;
+  VkDebugUtilsMessengerEXT vkDebugMessenger;
 
   void initWindow() {
     auto result = glfwInit();
@@ -45,7 +47,12 @@ class HelloTriangleApplication {
     glfwWindow = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
   }
 
-  void initVulkan() { createVulkanInstance(); }
+  void initVulkan() {
+    createVulkanInstance();
+    if (VK_ENABLE_VALIDATION_LAYERS) {
+      createVulkanDebugMessenger();
+    }
+  }
 
   void createVulkanInstance() {
     VkApplicationInfo appInfo{};
@@ -59,17 +66,20 @@ class HelloTriangleApplication {
     }
 
     std::vector<const char*> requiredExtensions;
-    readGlfwRequestedExtensions(requiredExtensions);
-
-    VkInstanceCreateInfo createInfo{};
-    setupVulkanInstanceCreateInfo(createInfo, appInfo, requiredExtensions,
-                                  VK_ENABLE_VALIDATION_LAYERS,
-                                  VK_VALIDATION_LAYERS);
+    requireGlfwRequestedExtensions(requiredExtensions);
+    if (VK_ENABLE_VALIDATION_LAYERS) {
+      requireValidationRequestedExtensions(requiredExtensions);
+    }
 
     std::vector<VkExtensionProperties> vulkanExtensions;
     readVulkanSupportedExtensions(vulkanExtensions);
     logVulkanSupportedExtensions(vulkanExtensions);
     checkSupportsRequiredExtensions(requiredExtensions, vulkanExtensions);
+
+    VkInstanceCreateInfo createInfo{};
+    setupVulkanInstanceCreateInfo(createInfo, appInfo, requiredExtensions,
+                                  VK_ENABLE_VALIDATION_LAYERS,
+                                  VK_VALIDATION_LAYERS);
 
     if (vkCreateInstance(&createInfo, nullptr, &vkInstance) != VK_SUCCESS) {
       throw std::runtime_error("Failed to create Vulkan instance");
@@ -123,7 +133,7 @@ class HelloTriangleApplication {
     }
   }
 
-  void readGlfwRequestedExtensions(
+  void requireGlfwRequestedExtensions(
       std::vector<const char*>& requiredExtensions) {
     uint32_t numGlfwExtensions = 0;
     const char** glfwExtensions =
@@ -132,6 +142,11 @@ class HelloTriangleApplication {
     for (uint32_t i = 0; i < numGlfwExtensions; i++) {
       requiredExtensions.push_back(glfwExtensions[i]);
     }
+  }
+
+  void requireValidationRequestedExtensions(
+      std::vector<const char*>& requiredExtensions) {
+    requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
   void checkSupportsRequiredExtensions(
@@ -189,6 +204,35 @@ class HelloTriangleApplication {
     }
   }
 
+  void createVulkanDebugMessenger() {
+    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = vkDebugMessengerCallback;
+    createInfo.pUserData = nullptr;
+
+    auto createDebugUtilsMessengerEXT =
+        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+            vkInstance, "vkCreateDebugUtilsMessengerEXT");
+    if (createDebugUtilsMessengerEXT == nullptr) {
+      throw std::runtime_error(
+          "Failed to setup debug messenger: vkCreateDebugUtilsMessengerEXT not "
+          "found");
+    }
+
+    if (createDebugUtilsMessengerEXT(vkInstance, &createInfo, nullptr,
+                                     &vkDebugMessenger) != VK_SUCCESS) {
+      throw std::runtime_error("Failed to setup debug messenger");
+    }
+  }
+
   void mainLoop() {
     while (!glfwWindowShouldClose(glfwWindow)) {
       glfwPollEvents();
@@ -205,7 +249,44 @@ class HelloTriangleApplication {
     glfwTerminate();
   }
 
-  void cleanupVulkan() { vkDestroyInstance(vkInstance, nullptr); }
+  void cleanupVulkan() {
+    if (VK_ENABLE_VALIDATION_LAYERS) {
+      auto destroyDebugUtilsMessengerEXT =
+          (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+              vkInstance, "vkDestroyDebugUtilsMessengerEXT");
+      if (destroyDebugUtilsMessengerEXT != nullptr) {
+        destroyDebugUtilsMessengerEXT(vkInstance, vkDebugMessenger, nullptr);
+      }
+    }
+
+    vkDestroyInstance(vkInstance, nullptr);
+  }
+
+  static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugMessengerCallback(
+      VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+      VkDebugUtilsMessageTypeFlagsEXT messageType,
+      const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+      void* pUserData) {
+    if (pCallbackData == nullptr) {
+      return VK_FALSE;
+    }
+
+    const char* message = pCallbackData->pMessage;
+
+    if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+      spdlog::error(message);
+    } else if (messageSeverity &
+               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+      spdlog::warn(message);
+    } else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+      spdlog::info(message);
+    } else if (messageSeverity &
+               VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+      spdlog::debug(message);
+    }
+
+    return VK_FALSE;
+  }
 };
 
 int main() {
