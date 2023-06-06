@@ -33,6 +33,7 @@ class HelloTriangleApplication {
   GLFWwindow* glfwWindow;
 
   VkInstance vkInstance;
+  VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
   VkDebugUtilsMessengerEXT vkDebugMessenger;
 
   void initWindow() {
@@ -52,6 +53,7 @@ class HelloTriangleApplication {
     if (VK_ENABLE_VALIDATION_LAYERS) {
       createVulkanDebugMessenger();
     }
+    createVulkanPhysicalDevice();
   }
 
   void createVulkanInstance() {
@@ -246,6 +248,57 @@ class HelloTriangleApplication {
                              VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = vkDebugMessengerCallback;
     createInfo.pUserData = nullptr;
+  }
+
+  void createVulkanPhysicalDevice() {
+    std::vector<VkPhysicalDevice> devices;
+
+    readAvailableVulkanPhysicalDevices(devices);
+    logAvailableVulkanPhysicalDevices(devices);
+
+    auto it = std::find_if(
+        devices.begin(), devices.end(), [this](const VkPhysicalDevice& device) {
+          return this->isVulkanPhysicalDeviceSuitable(device);
+        });
+
+    if (it == devices.end()) {
+      vkPhysicalDevice = VK_NULL_HANDLE;
+    } else {
+      vkPhysicalDevice = *it;
+    }
+
+    if (vkPhysicalDevice == VK_NULL_HANDLE) {
+      throw std::runtime_error("Failed to find suitable physical device");
+    }
+  }
+
+  void readAvailableVulkanPhysicalDevices(
+      std::vector<VkPhysicalDevice>& devices) {
+    uint32_t numDevices = 0;
+    vkEnumeratePhysicalDevices(vkInstance, &numDevices, nullptr);
+
+    if (numDevices == 0) {
+      devices.clear();
+      return;
+    }
+
+    devices.resize(numDevices);
+    vkEnumeratePhysicalDevices(vkInstance, &numDevices, devices.data());
+  }
+
+  void logAvailableVulkanPhysicalDevices(
+      const std::vector<VkPhysicalDevice>& devices) {
+    spdlog::debug("Available VK physical devices ({} total):", devices.size());
+    for (const auto& device : devices) {
+      VkPhysicalDeviceProperties deviceProperties;
+      vkGetPhysicalDeviceProperties(device, &deviceProperties);
+      spdlog::debug("\t{}", deviceProperties.deviceName);
+    }
+  }
+
+  bool isVulkanPhysicalDeviceSuitable(VkPhysicalDevice device) const {
+    // Any GPU will do for now.
+    return true;
   }
 
   void mainLoop() {
