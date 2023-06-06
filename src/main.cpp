@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <vector>
 
@@ -37,12 +38,17 @@ class HelloTriangleApplication {
   VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
   VkDevice vkDevice = VK_NULL_HANDLE;
   VkQueue vkGraphicsQueue = VK_NULL_HANDLE;
+  VkQueue vkPresentQueue = VK_NULL_HANDLE;
+  VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
   VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
 
   struct VkPhysicalDeviceQueueFamilies {
     std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> presentFamily;
 
-    bool isOk() { return graphicsFamily.has_value(); }
+    bool isOk() {
+      return graphicsFamily.has_value() && presentFamily.has_value();
+    }
   };
 
   void initWindow() {
@@ -62,6 +68,7 @@ class HelloTriangleApplication {
     if (VK_ENABLE_VALIDATION_LAYERS) {
       createVulkanDebugMessenger();
     }
+    createVulkanSurface();
     createVulkanPhysicalDevice();
     createVulkanLogicalDevice();
   }
@@ -260,6 +267,13 @@ class HelloTriangleApplication {
     createInfo.pUserData = nullptr;
   }
 
+  void createVulkanSurface() {
+    if (glfwCreateWindowSurface(vkInstance, glfwWindow, nullptr, &vkSurface) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Failed to create window surface");
+    }
+  }
+
   void createVulkanPhysicalDevice() {
     std::vector<VkPhysicalDevice> devices;
 
@@ -324,26 +338,36 @@ class HelloTriangleApplication {
     vkGetPhysicalDeviceQueueFamilyProperties(device, &numQueueFamilies,
                                              queueFamilyProperties.data());
 
-    auto it =
-        std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),
-                     [](const VkQueueFamilyProperties& queueFamily) {
-                       return queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT;
-                     });
-    if (it != queueFamilyProperties.end()) {
-      queueFamilies.graphicsFamily = static_cast<uint32_t>(
-          std::distance(queueFamilyProperties.begin(), it));
+    for (uint32_t i = 0; i < numQueueFamilies; i++) {
+      auto queueFamily = queueFamilyProperties[i];
+
+      if (queueFamily.queueCount > 0 &&
+          queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        queueFamilies.graphicsFamily = i;
+      }
+
+      VkBool32 presentSupport = false;
+      vkGetPhysicalDeviceSurfaceSupportKHR(device, i, vkSurface,
+                                           &presentSupport);
+      if (presentSupport) {
+        queueFamilies.presentFamily = i;
+      }
     }
   }
 
   void createVulkanLogicalDevice() {
-    VkDeviceQueueCreateInfo queueCreateInfo{};
-    setupVulkanDeviceQueueCreateInfo(queueCreateInfo);
+    VkPhysicalDeviceQueueFamilies queueFamilies;
+    readVulkanPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice,
+                                                  queueFamilies);
+
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+    setupVulkanDeviceQueueCreateInfo(queueFamilies, queueCreateInfos);
 
     VkPhysicalDeviceFeatures deviceFeatures{};
     setupVulkanPhysicalDeviceFeatures(deviceFeatures);
 
     VkDeviceCreateInfo createInfo{};
-    setupVulkanDeviceCreateInfo(createInfo, queueCreateInfo, deviceFeatures,
+    setupVulkanDeviceCreateInfo(createInfo, queueCreateInfos, deviceFeatures,
                                 VK_ENABLE_VALIDATION_LAYERS,
                                 VK_VALIDATION_LAYERS);
 
@@ -352,21 +376,32 @@ class HelloTriangleApplication {
       throw std::runtime_error("Failed to create logical device");
     }
 
-    vkGetDeviceQueue(vkDevice, queueCreateInfo.queueFamilyIndex, 0,
+    vkGetDeviceQueue(vkDevice, queueFamilies.graphicsFamily.value(), 0,
                      &vkGraphicsQueue);
+    vkGetDeviceQueue(vkDevice, queueFamilies.presentFamily.value(), 0,
+                     &vkPresentQueue);
   }
 
   void setupVulkanDeviceQueueCreateInfo(
-      VkDeviceQueueCreateInfo& queueCreateInfo) {
-    VkPhysicalDeviceQueueFamilies queueFamilies;
-    readVulkanPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice,
-                                                  queueFamilies);
+      const VkPhysicalDeviceQueueFamilies& queueFamilies,
+      std::vector<VkDeviceQueueCreateInfo>& queueCreateInfos) {
     float queuePriority = 1.0f;
 
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = queueFamilies.graphicsFamily.value();
-    queueCreateInfo.queueCount = 1;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
+    std::set<uint32_t> uniqueQueueFamilies = {
+        queueFamilies.graphicsFamily.value(),
+        queueFamilies.presentFamily.value(),
+    };
+
+    for (uint32_t queueFamily : uniqueQueueFamilies) {
+      VkDeviceQueueCreateInfo queueCreateInfo{};
+
+      queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+      queueCreateInfo.queueFamilyIndex = queueFamily;
+      queueCreateInfo.queueCount = 1;
+      queueCreateInfo.pQueuePriorities = &queuePriority;
+
+      queueCreateInfos.push_back(queueCreateInfo);
+    }
   }
 
   void setupVulkanPhysicalDeviceFeatures(
@@ -376,13 +411,14 @@ class HelloTriangleApplication {
 
   void setupVulkanDeviceCreateInfo(
       VkDeviceCreateInfo& createInfo,
-      const VkDeviceQueueCreateInfo& queueCreateInfo,
+      const std::vector<VkDeviceQueueCreateInfo>& queueCreateInfos,
       const VkPhysicalDeviceFeatures& deviceFeatures,
       bool enableValidationLayers,
       const std::vector<const char*>& validationLayers) {
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pQueueCreateInfos = &queueCreateInfo;
-    createInfo.queueCreateInfoCount = 1;
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.queueCreateInfoCount =
+        static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pEnabledFeatures = &deviceFeatures;
 
     if (enableValidationLayers) {
@@ -412,6 +448,7 @@ class HelloTriangleApplication {
 
   void cleanupVulkan() {
     vkDestroyDevice(vkDevice, nullptr);
+    vkDestroySurfaceKHR(vkInstance, vkSurface, nullptr);
 
     if (VK_ENABLE_VALIDATION_LAYERS) {
       auto destroyDebugUtilsMessengerEXT =
@@ -455,7 +492,7 @@ class HelloTriangleApplication {
 int main() {
   HelloTriangleApplication app;
 
-  spdlog::set_level(spdlog::level::debug);
+  spdlog::set_level(spdlog::level::info);
 
   try {
     app.run();
