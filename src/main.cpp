@@ -138,7 +138,6 @@ class HelloTriangleApplication {
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     glfwWindow = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
   }
@@ -1062,7 +1061,6 @@ class HelloTriangleApplication {
     // Wait for previous frame to finish
     vkWaitForFences(vkDevice, 1, &frameResources.inFlightFence, VK_TRUE,
                     UINT64_MAX);
-    vkResetFences(vkDevice, 1, &frameResources.inFlightFence);
 
     // Acquire image from swapchain
     uint32_t imageIndex;
@@ -1098,6 +1096,7 @@ class HelloTriangleApplication {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
+    vkResetFences(vkDevice, 1, &frameResources.inFlightFence);
     if (vkQueueSubmit(vkGraphicsQueue, 1, &submitInfo,
                       frameResources.inFlightFence) != VK_SUCCESS) {
       throw std::runtime_error("Failed to submit draw command buffer");
@@ -1119,18 +1118,29 @@ class HelloTriangleApplication {
     VkResult presentResult = vkQueuePresentKHR(vkPresentQueue, &presentInfo);
 
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR ||
-      presentResult == VK_SUBOPTIMAL_KHR) {
-			recreateVulkanSwapchain();
+        presentResult == VK_SUBOPTIMAL_KHR) {
+      recreateVulkanSwapchain();
+    } else if (presentResult != VK_SUCCESS) {
+      throw std::runtime_error("Failed to present swapchain image");
     }
-    else if (presentResult != VK_SUCCESS) {
-			throw std::runtime_error("Failed to present swapchain image");
-		}
   }
 
   void recreateVulkanSwapchain() {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(glfwWindow, &width, &height);
+
+    // Wait until window is back to foreground
+    while (width == 0 || height == 0) {
+      spdlog::info("Window minimized, waiting.");
+			glfwGetFramebufferSize(glfwWindow, &width, &height);
+			glfwWaitEvents();
+		}
+
     vkDeviceWaitIdle(vkDevice);
 
     cleanupVulkanSwapchain();
+
+    spdlog::info("Recreating swapchain with new dimensions {}x{}.", width, height);
 
     createVulkanSwapchain();
     createVulkanImageViews();
