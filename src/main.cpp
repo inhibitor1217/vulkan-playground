@@ -193,6 +193,8 @@ class Application {
   VkPipeline vkGraphicsPipeline = VK_NULL_HANDLE;
 
   VkCommandPool vkCommandPool = VK_NULL_HANDLE;
+  VkDescriptorPool vkDescriptorPool = VK_NULL_HANDLE;
+  std::vector<VkDescriptorSet> vkDescriptorSets;
 
   std::vector<VkFrameRenderResources> vkFrameRenderResources;
   uint32_t currentFrame = 0;
@@ -231,6 +233,8 @@ class Application {
     createVulkanVertexBuffer();
     createVulkanIndexBuffer();
     createVulkanFrameRenderResources();
+    createVulkanDescriptorPool();
+    createVulkanDescriptorSets();
   }
 
   void createVulkanInstance() {
@@ -1243,6 +1247,43 @@ class Application {
     }
   }
 
+  void createVulkanDescriptorPool() {
+    VkDescriptorPoolSize poolSize{};
+
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    if (vkCreateDescriptorPool(vkDevice, &poolInfo, nullptr,
+                               &vkDescriptorPool) != VK_SUCCESS) {
+      throw std::runtime_error("Failed to create descriptor pool");
+    }
+  }
+
+  void createVulkanDescriptorSets() {
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT,
+                                               vkDescriptorSetLayout);
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = vkDescriptorPool;
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    allocInfo.pSetLayouts = layouts.data();
+
+    vkDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(vkDevice, &allocInfo,
+                                 vkDescriptorSets.data()) != VK_SUCCESS) {
+      throw std::runtime_error("Failed to create descriptor sets");
+    }
+  }
+
   void recordVulkanCommandBuffer(VkCommandBuffer commandBuffer,
                                  uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo{};
@@ -1456,6 +1497,7 @@ class Application {
       vkDestroyBuffer(vkDevice, resource.uniformBuffer, nullptr);
       vkFreeMemory(vkDevice, resource.uniformBefferMemory, nullptr);
     }
+    vkDestroyDescriptorPool(vkDevice, vkDescriptorPool, nullptr);
     vkDestroyCommandPool(vkDevice, vkCommandPool, nullptr);
     vkDestroyPipeline(vkDevice, vkGraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkDevice, vkPipelineLayout, nullptr);
