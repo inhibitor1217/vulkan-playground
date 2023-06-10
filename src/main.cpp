@@ -173,6 +173,8 @@ class HelloTriangleApplication {
   std::vector<VkFrameRenderResources> vkFrameRenderResources;
   uint32_t currentFrame = 0;
 
+  VkBuffer vkVertexBuffer;
+
   void initWindow() {
     auto result = glfwInit();
     if (result != GLFW_TRUE) {
@@ -198,6 +200,7 @@ class HelloTriangleApplication {
     createVulkanGraphicsPipeline();
     createVulkanFramebuffers();
     createVulkanCommandPool();
+    createVulkanVertexBuffer();
     createVulkanFrameRenderResources();
   }
 
@@ -805,7 +808,8 @@ class HelloTriangleApplication {
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(attributeDescriptions.size());
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
@@ -945,6 +949,21 @@ class HelloTriangleApplication {
     }
 
     return shaderModule;
+  }
+
+  void createVulkanVertexBuffer() {
+    VkBufferCreateInfo bufferInfo{};
+
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(triangle[0]) * triangle.size();
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    bufferInfo.flags = 0;
+
+    if (vkCreateBuffer(vkDevice, &bufferInfo, nullptr, &vkVertexBuffer) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Failed to create vertex buffer");
+    }
   }
 
   void createVulkanFramebuffers() {
@@ -1206,6 +1225,7 @@ class HelloTriangleApplication {
   void cleanupVulkan() {
     cleanupVulkanSwapchain();
 
+    vkDestroyBuffer(vkDevice, vkVertexBuffer, nullptr);
     for (const auto& resource : vkFrameRenderResources) {
       vkDestroySemaphore(vkDevice, resource.imageAvailableSemaphore, nullptr);
       vkDestroySemaphore(vkDevice, resource.renderFinishedSemaphore, nullptr);
