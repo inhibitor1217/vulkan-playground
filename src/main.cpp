@@ -62,6 +62,8 @@ class HelloTriangleApplication {
   VkPipelineLayout vkPipelineLayout = VK_NULL_HANDLE;
   VkPipeline vkGraphicsPipeline = VK_NULL_HANDLE;
 
+  VkCommandPool vkCommandPool = VK_NULL_HANDLE;
+
   struct VkPhysicalDeviceQueueFamilies {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
@@ -142,6 +144,7 @@ class HelloTriangleApplication {
     createVulkanRenderPass();
     createVulkanGraphicsPipeline();
     createVulkanFramebuffers();
+    createVulkanCommandPool();
   }
 
   void createVulkanInstance() {
@@ -899,6 +902,23 @@ class HelloTriangleApplication {
     }
   }
 
+  void createVulkanCommandPool() {
+    VkPhysicalDeviceQueueFamilies queueFamilies;
+    readVulkanPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice,
+                                                  queueFamilies);
+
+    VkCommandPoolCreateInfo poolInfo{};
+
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = queueFamilies.graphicsFamily.value();
+
+    if (vkCreateCommandPool(vkDevice, &poolInfo, nullptr, &vkCommandPool) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Failed to create command pool");
+    }
+  }
+
   void mainLoop() {
     while (!glfwWindowShouldClose(glfwWindow)) {
       glfwPollEvents();
@@ -916,6 +936,7 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    vkDestroyCommandPool(vkDevice, vkCommandPool, nullptr);
     for (auto framebuffer : vkSwapchainFramebuffers) {
       vkDestroyFramebuffer(vkDevice, framebuffer, nullptr);
     }
