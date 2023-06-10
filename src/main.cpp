@@ -1090,8 +1090,8 @@ class HelloTriangleApplication {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(vkGraphicsQueue, 1, &submitInfo, frameResources.inFlightFence) !=
-        VK_SUCCESS) {
+    if (vkQueueSubmit(vkGraphicsQueue, 1, &submitInfo,
+                      frameResources.inFlightFence) != VK_SUCCESS) {
       throw std::runtime_error("Failed to submit draw command buffer");
     }
 
@@ -1111,6 +1111,16 @@ class HelloTriangleApplication {
     vkQueuePresentKHR(vkPresentQueue, &presentInfo);
   }
 
+  void recreateVulkanSwapchain() {
+    vkDeviceWaitIdle(vkDevice);
+  
+    cleanupVulkanSwapchain();
+
+    createVulkanSwapchain();
+    createVulkanImageViews();
+    createVulkanFramebuffers();
+  }
+
   void cleanup() {
     cleanupVulkan();
     cleanupGlfw();
@@ -1122,22 +1132,17 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    cleanupVulkanSwapchain();
+
     for (const auto& resource : vkFrameRenderResources) {
       vkDestroySemaphore(vkDevice, resource.imageAvailableSemaphore, nullptr);
       vkDestroySemaphore(vkDevice, resource.renderFinishedSemaphore, nullptr);
       vkDestroyFence(vkDevice, resource.inFlightFence, nullptr);
     }
     vkDestroyCommandPool(vkDevice, vkCommandPool, nullptr);
-    for (auto framebuffer : vkSwapchainFramebuffers) {
-      vkDestroyFramebuffer(vkDevice, framebuffer, nullptr);
-    }
     vkDestroyPipeline(vkDevice, vkGraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkDevice, vkPipelineLayout, nullptr);
     vkDestroyRenderPass(vkDevice, vkRenderPass, nullptr);
-    for (auto imageView : vkSwapchainImageViews) {
-      vkDestroyImageView(vkDevice, imageView, nullptr);
-    }
-    vkDestroySwapchainKHR(vkDevice, vkSwapchain, nullptr);
     vkDestroyDevice(vkDevice, nullptr);
     vkDestroySurfaceKHR(vkInstance, vkSurface, nullptr);
 
@@ -1151,6 +1156,18 @@ class HelloTriangleApplication {
     }
 
     vkDestroyInstance(vkInstance, nullptr);
+  }
+
+  void cleanupVulkanSwapchain() {
+    for (auto framebuffer : vkSwapchainFramebuffers) {
+      vkDestroyFramebuffer(vkDevice, framebuffer, nullptr);
+    }
+
+    for (auto imageView : vkSwapchainImageViews) {
+      vkDestroyImageView(vkDevice, imageView, nullptr);
+    }
+
+    vkDestroySwapchainKHR(vkDevice, vkSwapchain, nullptr);
   }
 
   static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugMessengerCallback(
