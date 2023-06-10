@@ -63,6 +63,7 @@ class HelloTriangleApplication {
   VkPipeline vkGraphicsPipeline = VK_NULL_HANDLE;
 
   VkCommandPool vkCommandPool = VK_NULL_HANDLE;
+  VkCommandBuffer vkCommandBuffer = VK_NULL_HANDLE;
 
   struct VkPhysicalDeviceQueueFamilies {
     std::optional<uint32_t> graphicsFamily;
@@ -145,6 +146,7 @@ class HelloTriangleApplication {
     createVulkanGraphicsPipeline();
     createVulkanFramebuffers();
     createVulkanCommandPool();
+    createVulkanCommandBuffer();
   }
 
   void createVulkanInstance() {
@@ -917,6 +919,20 @@ class HelloTriangleApplication {
         VK_SUCCESS) {
       throw std::runtime_error("Failed to create command pool");
     }
+  }
+
+  void createVulkanCommandBuffer() {
+    VkCommandBufferAllocateInfo allocInfo{};
+
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = vkCommandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    if (vkAllocateCommandBuffers(vkDevice, &allocInfo, &vkCommandBuffer) !=
+      VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate command buffer");
+		}
   }
 
   void mainLoop() {
