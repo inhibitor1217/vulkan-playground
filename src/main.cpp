@@ -56,6 +56,7 @@ class HelloTriangleApplication {
   VkFormat vkSwapchainFormat = VK_FORMAT_UNDEFINED;
   VkExtent2D vkSwapchainExtent = {0, 0};
   std::vector<VkImageView> vkSwapchainImageViews;
+  std::vector<VkFramebuffer> vkSwapchainFramebuffers;
 
   VkRenderPass vkRenderPass = VK_NULL_HANDLE;
   VkPipelineLayout vkPipelineLayout = VK_NULL_HANDLE;
@@ -140,6 +141,7 @@ class HelloTriangleApplication {
     createVulkanImageViews();
     createVulkanRenderPass();
     createVulkanGraphicsPipeline();
+    createVulkanFramebuffers();
   }
 
   void createVulkanInstance() {
@@ -874,6 +876,29 @@ class HelloTriangleApplication {
     return shaderModule;
   }
 
+  void createVulkanFramebuffers() {
+    vkSwapchainFramebuffers.resize(vkSwapchainImageViews.size());
+
+    for (size_t i = 0; i < vkSwapchainImageViews.size(); i++) {
+      VkImageView attachments[] = {vkSwapchainImageViews[i]};
+
+      VkFramebufferCreateInfo framebufferInfo{};
+
+      framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+      framebufferInfo.renderPass = vkRenderPass;
+      framebufferInfo.attachmentCount = 1;
+      framebufferInfo.pAttachments = attachments;
+      framebufferInfo.width = vkSwapchainExtent.width;
+      framebufferInfo.height = vkSwapchainExtent.height;
+      framebufferInfo.layers = 1;
+
+      if (vkCreateFramebuffer(vkDevice, &framebufferInfo, nullptr,
+                              &vkSwapchainFramebuffers[i]) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create framebuffer");
+      }
+    }
+  }
+
   void mainLoop() {
     while (!glfwWindowShouldClose(glfwWindow)) {
       glfwPollEvents();
@@ -891,6 +916,9 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    for (auto framebuffer : vkSwapchainFramebuffers) {
+      vkDestroyFramebuffer(vkDevice, framebuffer, nullptr);
+    }
     vkDestroyPipeline(vkDevice, vkGraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkDevice, vkPipelineLayout, nullptr);
     vkDestroyRenderPass(vkDevice, vkRenderPass, nullptr);
