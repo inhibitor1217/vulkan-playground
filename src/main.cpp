@@ -1,13 +1,17 @@
 #define GLFW_INCLUDE_VULKAN
+#define GLM_FORCE_RADIANS
+
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -160,6 +164,9 @@ class Application {
     VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
     VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
     VkFence inFlightFence = VK_NULL_HANDLE;
+    VkBuffer uniformBuffer;
+    VkDeviceMemory uniformBefferMemory;
+    void* uniformBufferMapped;
   };
 
   GLFWwindow* glfwWindow = nullptr;
@@ -1187,6 +1194,14 @@ class Application {
       createVulkanSemaphore(resource.imageAvailableSemaphore);
       createVulkanSemaphore(resource.renderFinishedSemaphore);
       createVulkanFence(resource.inFlightFence);
+      createVulkanBuffer(sizeof(UniformBufferObject),
+                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         resource.uniformBuffer, resource.uniformBefferMemory);
+      vkMapMemory(vkDevice, resource.uniformBefferMemory, 0,
+                  sizeof(UniformBufferObject), 0,
+                  &resource.uniformBufferMapped);
     }
   }
 
@@ -1319,6 +1334,9 @@ class Application {
       throw std::runtime_error("Failed to acquire swapchain image");
     }
 
+    // Update uniform buffer
+    updateUniformBuffer(frameIndex);
+
     // Submit command buffer
     vkResetCommandBuffer(frameResources.commandBuffer, 0);
     recordVulkanCommandBuffer(frameResources.commandBuffer, imageIndex);
@@ -1368,6 +1386,29 @@ class Application {
     }
   }
 
+  void updateUniformBuffer(uint32_t currentImageIndex) {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(
+                     currentTime - startTime)
+                     .count();
+
+    UniformBufferObject ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f),
+                            glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view =
+        glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                    glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(
+        glm::radians(45.0f),
+        vkSwapchainExtent.width / (float)vkSwapchainExtent.height, 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1;
+
+    memcpy(vkFrameRenderResources[currentImageIndex].uniformBufferMapped, &ubo,
+           sizeof(ubo));
+  }
+
   void recreateVulkanSwapchain() {
     int width = 0, height = 0;
     glfwGetFramebufferSize(glfwWindow, &width, &height);
@@ -1412,6 +1453,8 @@ class Application {
       vkDestroySemaphore(vkDevice, resource.imageAvailableSemaphore, nullptr);
       vkDestroySemaphore(vkDevice, resource.renderFinishedSemaphore, nullptr);
       vkDestroyFence(vkDevice, resource.inFlightFence, nullptr);
+      vkDestroyBuffer(vkDevice, resource.uniformBuffer, nullptr);
+      vkFreeMemory(vkDevice, resource.uniformBefferMemory, nullptr);
     }
     vkDestroyCommandPool(vkDevice, vkCommandPool, nullptr);
     vkDestroyPipeline(vkDevice, vkGraphicsPipeline, nullptr);
