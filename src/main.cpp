@@ -905,7 +905,7 @@ class Application {
     rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizerInfo.lineWidth = 1.0f;
     rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizerInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizerInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizerInfo.depthBiasEnable = VK_FALSE;
     rasterizerInfo.depthBiasConstantFactor = 0.0f;
     rasterizerInfo.depthBiasClamp = 0.0f;
@@ -1282,9 +1282,32 @@ class Application {
                                  vkDescriptorSets.data()) != VK_SUCCESS) {
       throw std::runtime_error("Failed to create descriptor sets");
     }
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+      VkDescriptorBufferInfo bufferInfo{};
+
+      bufferInfo.buffer = vkFrameRenderResources[i].uniformBuffer;
+      bufferInfo.offset = 0;
+      bufferInfo.range = sizeof(UniformBufferObject);
+
+      VkWriteDescriptorSet descriptorWrite{};
+
+      descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      descriptorWrite.dstSet = vkDescriptorSets[i];
+      descriptorWrite.dstBinding = 0;
+      descriptorWrite.dstArrayElement = 0;
+      descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+      descriptorWrite.descriptorCount = 1;
+      descriptorWrite.pBufferInfo = &bufferInfo;
+      descriptorWrite.pImageInfo = nullptr;
+      descriptorWrite.pTexelBufferView = nullptr;
+
+      vkUpdateDescriptorSets(vkDevice, 1, &descriptorWrite, 0, nullptr);
+    }
   }
 
   void recordVulkanCommandBuffer(VkCommandBuffer commandBuffer,
+                                 uint32_t inflightFrameIndex,
                                  uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo{};
 
@@ -1317,6 +1340,10 @@ class Application {
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, vkIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            vkPipelineLayout, 0, 1,
+                            &vkDescriptorSets[inflightFrameIndex], 0, nullptr);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -1380,7 +1407,8 @@ class Application {
 
     // Submit command buffer
     vkResetCommandBuffer(frameResources.commandBuffer, 0);
-    recordVulkanCommandBuffer(frameResources.commandBuffer, imageIndex);
+    recordVulkanCommandBuffer(frameResources.commandBuffer, frameIndex,
+                              imageIndex);
 
     VkSubmitInfo submitInfo{};
 
