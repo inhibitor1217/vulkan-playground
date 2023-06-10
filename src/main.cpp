@@ -40,34 +40,7 @@ class HelloTriangleApplication {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
   };
 
-  GLFWwindow* glfwWindow = nullptr;
-
-  VkInstance vkInstance = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
-
-  VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
-  VkDevice vkDevice = VK_NULL_HANDLE;
-  VkQueue vkGraphicsQueue = VK_NULL_HANDLE;
-  VkQueue vkPresentQueue = VK_NULL_HANDLE;
-  VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
-
-  VkSwapchainKHR vkSwapchain = VK_NULL_HANDLE;
-  std::vector<VkImage> vkSwapchainImages;
-  VkFormat vkSwapchainFormat = VK_FORMAT_UNDEFINED;
-  VkExtent2D vkSwapchainExtent = {0, 0};
-  std::vector<VkImageView> vkSwapchainImageViews;
-  std::vector<VkFramebuffer> vkSwapchainFramebuffers;
-
-  VkRenderPass vkRenderPass = VK_NULL_HANDLE;
-  VkPipelineLayout vkPipelineLayout = VK_NULL_HANDLE;
-  VkPipeline vkGraphicsPipeline = VK_NULL_HANDLE;
-
-  VkCommandPool vkCommandPool = VK_NULL_HANDLE;
-  VkCommandBuffer vkCommandBuffer = VK_NULL_HANDLE;
-
-  VkSemaphore vkImageAvailableSemaphore = VK_NULL_HANDLE;
-  VkSemaphore vkRenderFinishedSemaphore = VK_NULL_HANDLE;
-  VkFence vkInFlightFence = VK_NULL_HANDLE;
+  const int MAX_FRAMES_IN_FLIGHT = 2;
 
   struct VkPhysicalDeviceQueueFamilies {
     std::optional<uint32_t> graphicsFamily;
@@ -124,6 +97,40 @@ class HelloTriangleApplication {
     }
   };
 
+  struct VkFrameRenderResources {
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
+    VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
+    VkFence inFlightFence = VK_NULL_HANDLE;
+  };
+
+  GLFWwindow* glfwWindow = nullptr;
+
+  VkInstance vkInstance = VK_NULL_HANDLE;
+  VkDebugUtilsMessengerEXT vkDebugMessenger = VK_NULL_HANDLE;
+
+  VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
+  VkDevice vkDevice = VK_NULL_HANDLE;
+  VkQueue vkGraphicsQueue = VK_NULL_HANDLE;
+  VkQueue vkPresentQueue = VK_NULL_HANDLE;
+  VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
+
+  VkSwapchainKHR vkSwapchain = VK_NULL_HANDLE;
+  std::vector<VkImage> vkSwapchainImages;
+  VkFormat vkSwapchainFormat = VK_FORMAT_UNDEFINED;
+  VkExtent2D vkSwapchainExtent = {0, 0};
+  std::vector<VkImageView> vkSwapchainImageViews;
+  std::vector<VkFramebuffer> vkSwapchainFramebuffers;
+
+  VkRenderPass vkRenderPass = VK_NULL_HANDLE;
+  VkPipelineLayout vkPipelineLayout = VK_NULL_HANDLE;
+  VkPipeline vkGraphicsPipeline = VK_NULL_HANDLE;
+
+  VkCommandPool vkCommandPool = VK_NULL_HANDLE;
+
+  std::vector<VkFrameRenderResources> vkFrameRenderResources;
+  uint32_t currentFrame = 0;
+
   void initWindow() {
     auto result = glfwInit();
     if (result != GLFW_TRUE) {
@@ -150,8 +157,7 @@ class HelloTriangleApplication {
     createVulkanGraphicsPipeline();
     createVulkanFramebuffers();
     createVulkanCommandPool();
-    createVulkanCommandBuffer();
-    createVulkanSynchronizationObjects();
+    createVulkanFrameRenderResources();
   }
 
   void createVulkanInstance() {
@@ -937,7 +943,18 @@ class HelloTriangleApplication {
     }
   }
 
-  void createVulkanCommandBuffer() {
+  void createVulkanFrameRenderResources() {
+    vkFrameRenderResources.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (auto& resource : vkFrameRenderResources) {
+      createVulkanCommandBuffer(resource.commandBuffer);
+      createVulkanSemaphore(resource.imageAvailableSemaphore);
+      createVulkanSemaphore(resource.renderFinishedSemaphore);
+      createVulkanFence(resource.inFlightFence);
+    }
+  }
+
+  void createVulkanCommandBuffer(VkCommandBuffer& commandBuffer) {
     VkCommandBufferAllocateInfo allocInfo{};
 
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -945,17 +962,24 @@ class HelloTriangleApplication {
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = 1;
 
-    if (vkAllocateCommandBuffers(vkDevice, &allocInfo, &vkCommandBuffer) !=
+    if (vkAllocateCommandBuffers(vkDevice, &allocInfo, &commandBuffer) !=
         VK_SUCCESS) {
       throw std::runtime_error("Failed to allocate command buffer");
     }
   }
 
-  void createVulkanSynchronizationObjects() {
+  void createVulkanSemaphore(VkSemaphore& semaphore) {
     VkSemaphoreCreateInfo semaphoreInfo{};
 
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
+    if (vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr, &semaphore) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("Failed to create semaphore");
+    }
+  }
+
+  void createVulkanFence(VkFence& fence) {
     VkFenceCreateInfo fenceInfo{};
 
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -963,13 +987,8 @@ class HelloTriangleApplication {
         VK_FENCE_CREATE_SIGNALED_BIT;  // Start in signaled state, so we don't
                                        // wait on first frame
 
-    if (vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr,
-                          &vkImageAvailableSemaphore) != VK_SUCCESS ||
-        vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr,
-                          &vkRenderFinishedSemaphore) != VK_SUCCESS ||
-        vkCreateFence(vkDevice, &fenceInfo, nullptr, &vkInFlightFence) !=
-            VK_SUCCESS) {
-      throw std::runtime_error("Failed to create synchronization objects");
+    if (vkCreateFence(vkDevice, &fenceInfo, nullptr, &fence) != VK_SUCCESS) {
+      throw std::runtime_error("Failed to create fence");
     }
   }
 
@@ -1035,37 +1054,43 @@ class HelloTriangleApplication {
   }
 
   void frame() {
+    uint32_t frameIndex = currentFrame % MAX_FRAMES_IN_FLIGHT;
+    currentFrame++;
+
+    VkFrameRenderResources frameResources = vkFrameRenderResources[frameIndex];
+
     // Wait for previous frame to finish
-    vkWaitForFences(vkDevice, 1, &vkInFlightFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(vkDevice, 1, &vkInFlightFence);
+    vkWaitForFences(vkDevice, 1, &frameResources.inFlightFence, VK_TRUE,
+                    UINT64_MAX);
+    vkResetFences(vkDevice, 1, &frameResources.inFlightFence);
 
     // Acquire image from swapchain
     uint32_t imageIndex;
     vkAcquireNextImageKHR(vkDevice, vkSwapchain, UINT64_MAX,
-                          vkImageAvailableSemaphore, VK_NULL_HANDLE,
-                          &imageIndex);
+                          frameResources.imageAvailableSemaphore,
+                          VK_NULL_HANDLE, &imageIndex);
 
     // Submit command buffer
-    vkResetCommandBuffer(vkCommandBuffer, 0);
-    recordVulkanCommandBuffer(vkCommandBuffer, imageIndex);
+    vkResetCommandBuffer(frameResources.commandBuffer, 0);
+    recordVulkanCommandBuffer(frameResources.commandBuffer, imageIndex);
 
     VkSubmitInfo submitInfo{};
 
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = {vkImageAvailableSemaphore};
+    VkSemaphore waitSemaphores[] = {frameResources.imageAvailableSemaphore};
     VkPipelineStageFlags waitStages[] = {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &vkCommandBuffer;
-    VkSemaphore signalSemaphores[] = {vkRenderFinishedSemaphore};
+    submitInfo.pCommandBuffers = &frameResources.commandBuffer;
+    VkSemaphore signalSemaphores[] = {frameResources.renderFinishedSemaphore};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(vkGraphicsQueue, 1, &submitInfo, vkInFlightFence) !=
+    if (vkQueueSubmit(vkGraphicsQueue, 1, &submitInfo, frameResources.inFlightFence) !=
         VK_SUCCESS) {
       throw std::runtime_error("Failed to submit draw command buffer");
     }
@@ -1097,9 +1122,11 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
-    vkDestroySemaphore(vkDevice, vkImageAvailableSemaphore, nullptr);
-    vkDestroySemaphore(vkDevice, vkRenderFinishedSemaphore, nullptr);
-    vkDestroyFence(vkDevice, vkInFlightFence, nullptr);
+    for (const auto& resource : vkFrameRenderResources) {
+      vkDestroySemaphore(vkDevice, resource.imageAvailableSemaphore, nullptr);
+      vkDestroySemaphore(vkDevice, resource.renderFinishedSemaphore, nullptr);
+      vkDestroyFence(vkDevice, resource.inFlightFence, nullptr);
+    }
     vkDestroyCommandPool(vkDevice, vkCommandPool, nullptr);
     for (auto framebuffer : vkSwapchainFramebuffers) {
       vkDestroyFramebuffer(vkDevice, framebuffer, nullptr);
