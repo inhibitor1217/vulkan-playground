@@ -1066,9 +1066,17 @@ class HelloTriangleApplication {
 
     // Acquire image from swapchain
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(vkDevice, vkSwapchain, UINT64_MAX,
-                          frameResources.imageAvailableSemaphore,
-                          VK_NULL_HANDLE, &imageIndex);
+    VkResult acquireResult = vkAcquireNextImageKHR(
+        vkDevice, vkSwapchain, UINT64_MAX,
+        frameResources.imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+    if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
+      recreateVulkanSwapchain();
+      return;
+    }
+    if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR) {
+      throw std::runtime_error("Failed to acquire swapchain image");
+    }
 
     // Submit command buffer
     vkResetCommandBuffer(frameResources.commandBuffer, 0);
@@ -1108,12 +1116,20 @@ class HelloTriangleApplication {
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = nullptr;
 
-    vkQueuePresentKHR(vkPresentQueue, &presentInfo);
+    VkResult presentResult = vkQueuePresentKHR(vkPresentQueue, &presentInfo);
+
+    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR ||
+      presentResult == VK_SUBOPTIMAL_KHR) {
+			recreateVulkanSwapchain();
+    }
+    else if (presentResult != VK_SUCCESS) {
+			throw std::runtime_error("Failed to present swapchain image");
+		}
   }
 
   void recreateVulkanSwapchain() {
     vkDeviceWaitIdle(vkDevice);
-  
+
     cleanupVulkanSwapchain();
 
     createVulkanSwapchain();
