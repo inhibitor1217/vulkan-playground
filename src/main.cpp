@@ -65,6 +65,10 @@ class HelloTriangleApplication {
   VkCommandPool vkCommandPool = VK_NULL_HANDLE;
   VkCommandBuffer vkCommandBuffer = VK_NULL_HANDLE;
 
+  VkSemaphore vkImageAvailableSemaphore = VK_NULL_HANDLE;
+  VkSemaphore vkRenderFinishedSemaphore = VK_NULL_HANDLE;
+  VkFence vkInFlightFence = VK_NULL_HANDLE;
+
   struct VkPhysicalDeviceQueueFamilies {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
@@ -147,6 +151,7 @@ class HelloTriangleApplication {
     createVulkanFramebuffers();
     createVulkanCommandPool();
     createVulkanCommandBuffer();
+    createVulkanSynchronizationObjects();
   }
 
   void createVulkanInstance() {
@@ -935,6 +940,25 @@ class HelloTriangleApplication {
     }
   }
 
+  void createVulkanSynchronizationObjects() {
+    VkSemaphoreCreateInfo semaphoreInfo{};
+
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo{};
+
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+    if (vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr,
+                          &vkImageAvailableSemaphore) != VK_SUCCESS ||
+        vkCreateSemaphore(vkDevice, &semaphoreInfo, nullptr,
+                          &vkRenderFinishedSemaphore) != VK_SUCCESS ||
+        vkCreateFence(vkDevice, &fenceInfo, nullptr, &vkInFlightFence) !=
+            VK_SUCCESS) {
+      throw std::runtime_error("Failed to create synchronization objects");
+    }
+  }
+
   void recordVulkanCommandBuffer(VkCommandBuffer commandBuffer,
                                  uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo{};
@@ -983,15 +1007,18 @@ class HelloTriangleApplication {
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to record command buffer");
-		}
+      throw std::runtime_error("Failed to record command buffer");
+    }
   }
 
   void mainLoop() {
     while (!glfwWindowShouldClose(glfwWindow)) {
       glfwPollEvents();
+      frame();
     }
   }
+
+  void frame() {}
 
   void cleanup() {
     cleanupVulkan();
@@ -1004,6 +1031,9 @@ class HelloTriangleApplication {
   }
 
   void cleanupVulkan() {
+    vkDestroySemaphore(vkDevice, vkImageAvailableSemaphore, nullptr);
+    vkDestroySemaphore(vkDevice, vkRenderFinishedSemaphore, nullptr);
+    vkDestroyFence(vkDevice, vkInFlightFence, nullptr);
     vkDestroyCommandPool(vkDevice, vkCommandPool, nullptr);
     for (auto framebuffer : vkSwapchainFramebuffers) {
       vkDestroyFramebuffer(vkDevice, framebuffer, nullptr);
