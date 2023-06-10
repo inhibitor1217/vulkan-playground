@@ -68,6 +68,12 @@ const Mesh mesh = {{{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
                     {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}},
                    {0, 1, 2, 2, 3, 0}};
 
+struct UniformBufferObject {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 proj;
+};
+
 class Application {
  public:
   void run() {
@@ -175,6 +181,7 @@ class Application {
   std::vector<VkFramebuffer> vkSwapchainFramebuffers;
 
   VkRenderPass vkRenderPass = VK_NULL_HANDLE;
+  VkDescriptorSetLayout vkDescriptorSetLayout = VK_NULL_HANDLE;
   VkPipelineLayout vkPipelineLayout = VK_NULL_HANDLE;
   VkPipeline vkGraphicsPipeline = VK_NULL_HANDLE;
 
@@ -210,6 +217,7 @@ class Application {
     createVulkanSwapchain();
     createVulkanImageViews();
     createVulkanRenderPass();
+    createVulkanDescriptorSetLayout();
     createVulkanGraphicsPipeline();
     createVulkanFramebuffers();
     createVulkanCommandPool();
@@ -774,6 +782,27 @@ class Application {
     }
   }
 
+  void createVulkanDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(vkDevice, &layoutInfo, nullptr,
+                                    &vkDescriptorSetLayout) != VK_SUCCESS) {
+      throw std::runtime_error("Failed to create descriptor set layout");
+    }
+  }
+
   void createVulkanGraphicsPipeline() {
     auto vertexShader = readFile("res/triangle.vert.spv");
     auto fragmentShader = readFile("res/triangle.frag.spv");
@@ -911,8 +940,8 @@ class Application {
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pSetLayouts = nullptr;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &vkDescriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -1247,7 +1276,8 @@ class Application {
     scissor.extent = vkSwapchainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.numIndices()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.numIndices()), 1,
+                     0, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1386,6 +1416,7 @@ class Application {
     vkDestroyCommandPool(vkDevice, vkCommandPool, nullptr);
     vkDestroyPipeline(vkDevice, vkGraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkDevice, vkPipelineLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vkDevice, vkDescriptorSetLayout, nullptr);
     vkDestroyRenderPass(vkDevice, vkRenderPass, nullptr);
     vkDestroyDevice(vkDevice, nullptr);
     vkDestroySurfaceKHR(vkInstance, vkSurface, nullptr);
