@@ -52,13 +52,23 @@ struct Vertex {
   }
 };
 
-const std::vector<Vertex> triangle = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+struct Mesh {
+  std::vector<Vertex> vertices;
+  std::vector<uint16_t> indices;
+
+  size_t numVertices() const { return vertices.size(); }
+  size_t numIndices() const { return indices.size(); }
+  size_t vertexBufferSize() const { return numVertices() * sizeof(Vertex); }
+  size_t indexBufferSize() const { return numIndices() * sizeof(uint16_t); }
 };
 
-class HelloTriangleApplication {
+const Mesh mesh = {{{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+                    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+                    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+                    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}},
+                   {0, 1, 2, 2, 3, 0}};
+
+class Application {
  public:
   void run() {
     initWindow();
@@ -175,6 +185,8 @@ class HelloTriangleApplication {
 
   VkBuffer vkVertexBuffer;
   VkDeviceMemory vkVertexBufferMemory;
+  VkBuffer vkIndexBuffer;
+  VkDeviceMemory vkIndexBufferMemory;
 
   void initWindow() {
     auto result = glfwInit();
@@ -202,6 +214,7 @@ class HelloTriangleApplication {
     createVulkanFramebuffers();
     createVulkanCommandPool();
     createVulkanVertexBuffer();
+    createVulkanIndexBuffer();
     createVulkanFrameRenderResources();
   }
 
@@ -953,7 +966,7 @@ class HelloTriangleApplication {
   }
 
   void createVulkanVertexBuffer() {
-    VkDeviceSize bufferSize = sizeof(triangle[0]) * triangle.size();
+    VkDeviceSize bufferSize = mesh.vertexBufferSize();
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -965,7 +978,7 @@ class HelloTriangleApplication {
 
     void* data;
     vkMapMemory(vkDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, triangle.data(), (size_t)bufferSize);
+    memcpy(data, mesh.vertices.data(), (size_t)bufferSize);
     vkUnmapMemory(vkDevice, stagingBufferMemory);
 
     createVulkanBuffer(
@@ -974,6 +987,33 @@ class HelloTriangleApplication {
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vkVertexBuffer,
         vkVertexBufferMemory);
     copyVulkanBuffer(stagingBuffer, vkVertexBuffer, bufferSize);
+
+    vkDestroyBuffer(vkDevice, stagingBuffer, nullptr);
+    vkFreeMemory(vkDevice, stagingBufferMemory, nullptr);
+  }
+
+  void createVulkanIndexBuffer() {
+    VkDeviceSize bufferSize = mesh.indexBufferSize();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+
+    createVulkanBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                       stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(vkDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, mesh.indices.data(), (size_t)bufferSize);
+    vkUnmapMemory(vkDevice, stagingBufferMemory);
+
+    createVulkanBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vkIndexBuffer,
+        vkIndexBufferMemory);
+    copyVulkanBuffer(stagingBuffer, vkIndexBuffer, bufferSize);
 
     vkDestroyBuffer(vkDevice, stagingBuffer, nullptr);
     vkFreeMemory(vkDevice, stagingBufferMemory, nullptr);
@@ -1191,6 +1231,7 @@ class HelloTriangleApplication {
     VkBuffer vertexBuffers[] = {vkVertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, vkIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -1206,7 +1247,7 @@ class HelloTriangleApplication {
     scissor.extent = vkSwapchainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    vkCmdDraw(commandBuffer, static_cast<uint32_t>(triangle.size()), 1, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.numIndices()), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1335,6 +1376,8 @@ class HelloTriangleApplication {
 
     vkDestroyBuffer(vkDevice, vkVertexBuffer, nullptr);
     vkFreeMemory(vkDevice, vkVertexBufferMemory, nullptr);
+    vkDestroyBuffer(vkDevice, vkIndexBuffer, nullptr);
+    vkFreeMemory(vkDevice, vkIndexBufferMemory, nullptr);
     for (const auto& resource : vkFrameRenderResources) {
       vkDestroySemaphore(vkDevice, resource.imageAvailableSemaphore, nullptr);
       vkDestroySemaphore(vkDevice, resource.renderFinishedSemaphore, nullptr);
@@ -1418,7 +1461,7 @@ class HelloTriangleApplication {
 };
 
 int main() {
-  HelloTriangleApplication app;
+  Application app;
 
   spdlog::set_level(spdlog::level::info);
 
