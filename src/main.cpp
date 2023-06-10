@@ -985,6 +985,11 @@ class HelloTriangleApplication {
     }
 
     vkBindBufferMemory(vkDevice, vkVertexBuffer, vkVertexBufferMemory, 0);
+
+    void* data;
+    vkMapMemory(vkDevice, vkVertexBufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, triangle.data(), (size_t)bufferInfo.size);
+    vkUnmapMemory(vkDevice, vkVertexBufferMemory);
   }
 
   uint32_t findMemoryType(uint32_t typeFilter,
@@ -1122,6 +1127,10 @@ class HelloTriangleApplication {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       vkGraphicsPipeline);
 
+    VkBuffer vertexBuffers[] = {vkVertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -1136,7 +1145,7 @@ class HelloTriangleApplication {
     scissor.extent = vkSwapchainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdDraw(commandBuffer, static_cast<uint32_t>(triangle.size()), 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
